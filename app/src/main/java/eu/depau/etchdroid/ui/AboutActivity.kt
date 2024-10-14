@@ -48,7 +48,7 @@ import eu.depau.etchdroid.R
 import eu.depau.etchdroid.ui.composables.MainView
 import eu.depau.etchdroid.ui.composables.coloredShadow
 import eu.depau.etchdroid.utils.ktexts.activity
-import eu.depau.etchdroid.utils.reviews.WriteReviewHelper
+import eu.depau.etchdroid.plugins.reviews.WriteReviewHelper
 
 class AboutActivity : ComponentActivity() {
     private val mViewModel: ThemeViewModel by viewModels()

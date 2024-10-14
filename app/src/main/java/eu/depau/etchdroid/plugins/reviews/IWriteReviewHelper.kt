@@ -1,4 +1,4 @@
-package eu.depau.etchdroid.utils.reviews
+package eu.depau.etchdroid.plugins.reviews
 
 interface IWriteReviewHelper {
     val isGPlayFlavor: Boolean

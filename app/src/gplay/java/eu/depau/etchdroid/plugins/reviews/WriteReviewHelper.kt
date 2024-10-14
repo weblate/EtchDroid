@@ -1,4 +1,4 @@
-package eu.depau.etchdroid.utils.reviews
+package eu.depau.etchdroid.plugins.reviews
 
 import android.app.Activity
 import android.content.Context

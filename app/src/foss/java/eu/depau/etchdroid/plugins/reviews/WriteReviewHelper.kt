@@ -1,4 +1,4 @@
-package eu.depau.etchdroid.utils.reviews
+package eu.depau.etchdroid.plugins.reviews
 
 import android.app.Activity
 import android.content.Intent
@@ -10,10 +10,10 @@ class WriteReviewHelper(private val mActivity: Activity) : IWriteReviewHelper {
 
     override fun launchReviewFlow() {
         mActivity.startActivity(
-            Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("https://github.com/EtchDroid/EtchDroid/")
-            )
+                Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/EtchDroid/EtchDroid/")
+                )
         )
     }
 }

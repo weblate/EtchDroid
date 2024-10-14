@@ -73,7 +73,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -126,7 +125,7 @@ import eu.depau.etchdroid.utils.ktexts.startForegroundServiceCompat
 import eu.depau.etchdroid.utils.ktexts.toHRSize
 import eu.depau.etchdroid.utils.ktexts.toast
 import eu.depau.etchdroid.utils.ktexts.usbDevice
-import eu.depau.etchdroid.utils.reviews.WriteReviewHelper
+import eu.depau.etchdroid.plugins.reviews.WriteReviewHelper
 import kotlinx.coroutines.delay
 import me.jahnen.libaums.libusbcommunication.LibusbError
 import me.jahnen.libaums.libusbcommunication.LibusbException
