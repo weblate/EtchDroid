@@ -1,6 +1,6 @@
 [versions]
 accompanist = "0.32.0"
-android-gradle-plugin = "8.7.0"
+android-gradle-plugin = "8.7.1"
 coil = "2.5.0"
 compose = "1.7.3"
 compose-bom = "2024.09.03"
