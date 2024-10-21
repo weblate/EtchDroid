@@ -31,7 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.HelpCenter
+import androidx.compose.material.icons.automirrored.outlined.HelpCenter
 import androidx.compose.material.icons.twotone.Check
 import androidx.compose.material.icons.twotone.Clear
 import androidx.compose.material.icons.twotone.Info
@@ -587,7 +587,7 @@ fun ItemSupportEntry(
         Icon(
             imageVector = when (supportStatus) {
                 SupportStatus.SUPPORTED -> Icons.TwoTone.Check
-                SupportStatus.MAYBE_SUPPORTED -> Icons.Outlined.HelpCenter
+                SupportStatus.MAYBE_SUPPORTED -> Icons.AutoMirrored.Outlined.HelpCenter
                 SupportStatus.UNSUPPORTED -> Icons.TwoTone.Clear
             }, contentDescription = when (supportStatus) {
                 SupportStatus.SUPPORTED -> stringResource(R.string.supported)
