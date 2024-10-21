@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.HelpCenter
 import androidx.compose.material.icons.twotone.Check
@@ -766,24 +765,19 @@ fun WhatCanIWriteBottomSheet(onDismissRequest: () -> Unit, darkTheme: Boolean = 
                             textDecoration = TextDecoration.Underline
                         ), start = startIndex, end = endIndex
                     )
-                    addStringAnnotation(
-                        tag = "URL",
-                        annotation = "https://github.com/EtchDroid/EtchDroid/releases/tag/dmg-support",
-                        start = startIndex, end = endIndex
+                    addLink(
+                            LinkAnnotation.Url("https://github.com/EtchDroid/EtchDroid/releases/tag/dmg-support"),
+                            startIndex,
+                            endIndex
                     )
                 }
-                ClickableText(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp),
-                    text = annotatedString, style = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onBackground
-                    ), onClick = {
-                        annotatedString.getStringAnnotations("URL", it, it)
-                            .firstOrNull()
-                            ?.let { stringAnnotation ->
-                                uriHandler.openUri(stringAnnotation.item)
-                            }
-                    })
+                Text(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 32.dp),
+                        text = annotatedString,
+                        style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onBackground)
+                )
             }
         }
     }
