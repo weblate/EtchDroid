@@ -366,4 +366,25 @@
 
     <!-- Displayed in the fatal error screen, in a small button. When pressed, the app opens the GitHub issues page. Since the button is small, please keep this short. You can replace it with "GitHub issues" if "View GitHub issues" is too long in your language. -->
     <string name="view_github_issues">View GitHub issues</string>
+
+    <!-- Displayed in the menu if the current app build may send telemetry (Google Play builds) -->
+    <string name="telemetry">Telemetry</string>
+
+    <!-- Displayed in the app menu, as well as in other links to the privacy policy -->
+    <string name="privacy_policy">Privacy policy</string>
+
+    <!-- Displayed in builds with telemetry enabled (Google Play) when the user tries to opt-out of telemetry to try to convince them not to. '%1$s' is replaced with a link to the privacy policy; the `privacy_policy` string is used. -->
+    <string name="telemetry_rationale">EtchDroid values your privacy and only uses minimal telemetry to investigate app issues.\n\nBe a part of our open-source community—keep telemetry enabled and help improve EtchDroid for everyone!\n\nWhile we don\'t collect any personally-identifying information, we believe in transparency and want you to know that opened image file names and USB device IDs are collected anonymously to help diagnose issues with specific hardware. Unless your image file names or device IDs are highly sensitive, it\'s safe to share this data. (%1$s)</string>
+
+    <!-- Title of the dialog that asks the user to enable telemetry -->
+    <string name="we_need_your_help">We need your help!</string>
+
+    <!-- Description of the telemetry icon for accessibility purposes -->
+    <string name="telemetry_icon">Telemetry icon</string>
+
+    <!-- Button to opt-out of telemetry; it can be translated as "Disable telemetry" if it fits better in the target language -->
+    <string name="telemetry_opt_out">Opt-out</string>
+
+    <!-- Button to opt-in to telemetry; it can be translated as "Enable telemetry" if it fits better in the target language -->
+    <string name="telemetry_keep_enabled">Keep enabled</string>
 </resources>

@@ -44,11 +44,13 @@ import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import eu.depau.etchdroid.AppSettings
 import eu.depau.etchdroid.BuildConfig
+import eu.depau.etchdroid.PRIVACY_URL
 import eu.depau.etchdroid.R
 import eu.depau.etchdroid.ui.composables.MainView
 import eu.depau.etchdroid.ui.composables.coloredShadow
 import eu.depau.etchdroid.utils.ktexts.activity
 import eu.depau.etchdroid.plugins.reviews.WriteReviewHelper
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
 
 class AboutActivity : ComponentActivity() {
     private val mViewModel: ThemeViewModel by viewModels()
@@ -228,6 +230,26 @@ fun AboutView(viewModel: ThemeViewModel) {
                             githubStart,
                             githubEnd
                     )
+
+                    if (!Telemetry.isStub) {
+                        val privacyPolicyStr = stringResource(R.string.privacy_policy)
+                        append("\n$privacyPolicyStr")
+                        val privacyPolicyStart = str.length + 1
+                        val privacyPolicyEnd = privacyPolicyStart + privacyPolicyStr.length
+                        addStyle(
+                                style = SpanStyle(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        textDecoration = TextDecoration.Underline
+                                ),
+                                start = privacyPolicyStart,
+                                end = privacyPolicyEnd
+                        )
+                        addLink(
+                                LinkAnnotation.Url(PRIVACY_URL),
+                                privacyPolicyStart,
+                                privacyPolicyEnd
+                        )
+                    }
                 }
 
                 Text(

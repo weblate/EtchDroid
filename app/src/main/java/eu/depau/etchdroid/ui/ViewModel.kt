@@ -18,6 +18,8 @@ import eu.depau.etchdroid.SettingChangeListener
 import eu.depau.etchdroid.ThemeMode
 import eu.depau.etchdroid.massstorage.EtchDroidUsbMassStorageDevice.Companion.massStorageDevices
 import eu.depau.etchdroid.massstorage.UsbMassStorageDeviceDescriptor
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
+import eu.depau.etchdroid.plugins.telemetry.TelemetryLevel
 import eu.depau.etchdroid.utils.exception.ServiceTimeoutException
 import eu.depau.etchdroid.utils.exception.base.EtchDroidException
 import eu.depau.etchdroid.utils.exception.base.RecoverableException
@@ -83,6 +85,8 @@ data class MainActivityState(
     val showWindowsAlertForUri: Uri? = null,
     val openedImage: Uri? = null,
     val massStorageDevices: Set<UsbMassStorageDeviceDescriptor> = emptySet(),
+    val telemetry: Boolean = false,
+    val showTelemetry: Boolean = true,
 ) : IThemeState {
     companion object {
         val Empty: MainActivityState
@@ -97,7 +101,8 @@ class MainActivityViewModel : ViewModel(), SettingChangeListener, IThemeViewMode
     override fun refreshSettings(settings: AppSettings) {
         _state.update {
             it.copy(
-                dynamicColors = settings.dynamicColors, themeMode = settings.themeMode
+                    dynamicColors = settings.dynamicColors,
+                    themeMode = settings.themeMode,
             )
         }
     }
@@ -141,6 +146,18 @@ class MainActivityViewModel : ViewModel(), SettingChangeListener, IThemeViewMode
             state.copy(
                 massStorageDevices = devices.flatMap { it.massStorageDevices }.toSet()
             )
+        }
+    }
+
+    fun setTelemetry(enabled: Boolean) {
+        _state.update {
+            it.copy(telemetry = enabled)
+        }
+    }
+
+    fun setTelemetryShown(shown: Boolean) {
+        _state.update {
+            it.copy(showTelemetry = shown)
         }
     }
 
@@ -244,6 +261,23 @@ class ProgressActivityViewModel : ViewModel(), SettingChangeListener, IThemeView
         val sourceUri = intent.safeParcelableExtra<Uri>("sourceUri")!!
         val status = intent.safeParcelableExtra<JobStatusInfo>("status")!!
 
+        Telemetry.addBreadcrumb {
+            message =
+                "[${status.jobId}] Job progress notification: ${intent.action}, ${status.percent}%, verifying: ${status.isVerifying}"
+            category = "job_broadcast"
+            level = when (intent.action) {
+                Intents.JOB_PROGRESS -> TelemetryLevel.DEBUG
+                Intents.FINISHED -> TelemetryLevel.INFO
+                Intents.ERROR -> TelemetryLevel.ERROR
+                else -> TelemetryLevel.INFO
+            }
+            data["job.id"] = status.jobId.toString()
+            data["job.percent"] = status.percent.toString()
+            data["job.isVerifying"] = status.isVerifying.toString()
+            data["job.processedBytes"] = status.processedBytes.toString()
+            data["job.totalBytes"] = status.totalBytes.toString()
+        }
+
         when (intent.action) {
             Intents.JOB_PROGRESS -> {
                 _state.update {
@@ -290,6 +324,9 @@ class ProgressActivityViewModel : ViewModel(), SettingChangeListener, IThemeView
                         percent = status.percent,
                         lastNotificationTime = System.currentTimeMillis(),
                     )
+                }
+                if (status.exception != null) {
+                    Telemetry.captureException(status.exception)
                 }
             }
         }

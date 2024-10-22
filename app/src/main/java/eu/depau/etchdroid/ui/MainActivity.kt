@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,12 +30,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpCenter
 import androidx.compose.material.icons.twotone.Check
 import androidx.compose.material.icons.twotone.Clear
 import androidx.compose.material.icons.twotone.Info
+import androidx.compose.material.icons.twotone.Policy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -67,13 +71,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -81,11 +87,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import eu.depau.etchdroid.AppSettings
+import eu.depau.etchdroid.PRIVACY_URL
 import eu.depau.etchdroid.R
 import eu.depau.etchdroid.ThemeMode
 import eu.depau.etchdroid.getConfirmOperationActivityIntent
 import eu.depau.etchdroid.massstorage.IUsbMassStorageDeviceDescriptor
 import eu.depau.etchdroid.massstorage.UsbMassStorageDeviceDescriptor
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
+import eu.depau.etchdroid.plugins.telemetry.TelemetryLevel
 import eu.depau.etchdroid.ui.composables.MainView
 import eu.depau.etchdroid.ui.composables.coloredShadow
 import eu.depau.etchdroid.ui.theme.notSupportedRed
@@ -94,7 +103,6 @@ import eu.depau.etchdroid.ui.theme.supportedGreen
 import eu.depau.etchdroid.ui.utils.rememberPorkedAroundSheetState
 import eu.depau.etchdroid.utils.broadcastReceiver
 import eu.depau.etchdroid.utils.ktexts.getFileName
-import eu.depau.etchdroid.utils.ktexts.getFilePath
 import eu.depau.etchdroid.utils.ktexts.registerExportedReceiver
 import eu.depau.etchdroid.utils.ktexts.usbDevice
 
@@ -107,6 +115,12 @@ class MainActivity : ComponentActivity() {
 
     private val mFilePickerActivity: ActivityResultLauncher<Array<String>> =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { result ->
+            Telemetry.addBreadcrumb {
+                message = "User selected file: $result"
+                level = TelemetryLevel.DEBUG
+                category = "flow"
+                data["image.filename"] = result?.getFileName(this@MainActivity) ?: "null"
+            }
             openUri(result ?: return@registerForActivityResult)
         }
 
@@ -169,14 +183,28 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openUri(uri: Uri, userSaysYolo: Boolean = false) {
+        val filename = uri.getFileName(this)
+        Telemetry.addBreadcrumb {
+            message = "Opening image: $filename"
+            category = "flow"
+            level = TelemetryLevel.DEBUG
+            data["image.filename"] = filename ?: "null"
+            data["bypass_windows_alert"] = userSaysYolo.toString()
+        }
+
         if (!userSaysYolo) {
             try {
                 // Check if it's a Windows image and alert the user; fail-open
-                (uri.getFileName(this) ?: uri.getFilePath(this)
-                    ?.split("/")
-                    ?.last())?.let { filename ->
-                    val lowercase = filename.lowercase()
+                filename?.let {
+                    val lowercase = it.lowercase()
                     if ("windows" in lowercase || lowercase.startsWith("win")) {
+                        Telemetry.addBreadcrumb {
+                            message = "Windows image detected"
+                            category = "flow"
+                            level = TelemetryLevel.DEBUG
+                            data["image.filename"] = it
+                        }
+
                         mViewModel.setShowWindowsAlertUri(uri)
                         return
                     }
@@ -188,6 +216,11 @@ class MainActivity : ComponentActivity() {
         mViewModel.setOpenedImage(uri)
 
         if (mViewModel.state.value.massStorageDevices.size == 1) {
+            Telemetry.addBreadcrumb {
+                message = "Only one USB device, opening confirmation activity"
+                category = "flow"
+            }
+
             launchConfirmationActivity(
                 mViewModel.state.value.massStorageDevices.first(),
                 uri
@@ -202,6 +235,11 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
+        mViewModel.apply {
+            setTelemetry(Telemetry.enabled)
+            setTelemetryShown(!Telemetry.isStub)
+        }
+
         mSettings = AppSettings(this).apply {
             addListener(mViewModel)
             mViewModel.refreshSettings(this)
@@ -214,12 +252,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             MainView(mViewModel) {
                 StartView(
-                    mViewModel, setThemeMode = { mSettings.themeMode = it },
-                    setDynamicTheme = { mSettings.dynamicColors = it },
-                    onCTAClick = { mFilePickerActivity.launch() },
-                    openAboutView = {
-                        startActivity(Intent(this, AboutActivity::class.java))
-                    },
+                        mViewModel,
+                        setThemeMode = { mSettings.themeMode = it },
+                        setDynamicTheme = { mSettings.dynamicColors = it },
+                        onCTAClick = {
+                            Telemetry.addBreadcrumb {
+                                message = "User clicked on Write an image"
+                                category = "flow"
+                                level = TelemetryLevel.DEBUG
+                            }
+                            mFilePickerActivity.launch()
+                        },
+                        openAboutView = {
+                            startActivity(Intent(this, AboutActivity::class.java))
+                        },
+                        setTelemetry = { enabled ->
+                            Telemetry.enabled = enabled
+                            mViewModel.setTelemetry(enabled)
+                        }
                 )
                 val uiState by mViewModel.state.collectAsState()
                 if (uiState.showWindowsAlertForUri != null) {
@@ -233,6 +283,16 @@ class MainActivity : ComponentActivity() {
                             mViewModel.setOpenedImage(null)
                         },
                         selectDevice = {
+                            Telemetry.addBreadcrumb {
+                                message =
+                                    "User selected USB device, opening confirmation activity: $it"
+                                category = "flow"
+                                level = TelemetryLevel.INFO
+                                data["usb.device"] = it.toString()
+                                data["usb.name"] = it.name
+                                data["usb.vidpid"] = it.vidpid
+                            }
+
                             launchConfirmationActivity(
                                 it as UsbMassStorageDeviceDescriptor,
                                 mViewModel.state.value.openedImage!!,
@@ -327,10 +387,12 @@ fun StartView(
     setDynamicTheme: (Boolean) -> Unit = {},
     onCTAClick: () -> Unit = {},
     openAboutView: () -> Unit = {},
+    setTelemetry: (Boolean) -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsState()
     var menuOpen by remember { mutableStateOf(false) }
     var whatCanIWriteOpen by remember { mutableStateOf(false) }
+    var telemetryDialogOpen by remember { mutableStateOf(false) }
 
     val iconBackgroundColor = MaterialTheme.colorScheme.onSurfaceVariant
     val systemInDarkMode = isSystemInDarkTheme()
@@ -446,6 +508,55 @@ fun StartView(
                         })
                     }
 
+                    if (!Telemetry.isStub) {
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                                stringResource(R.string.telemetry),
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(12.dp, 0.dp)
+                        )
+
+                        fun toggleTelemetry() {
+                            val checked = uiState.telemetry
+                            if (checked) {
+                                telemetryDialogOpen = true
+                            } else {
+                                setTelemetry(true)
+                            }
+                        }
+
+                        DropdownMenuItem(
+                                onClick = { toggleTelemetry() },
+                                text = { Text("Send anonymous data") },
+                                leadingIcon = {
+                                    Checkbox(modifier = Modifier.size(20.dp),
+                                            checked = Telemetry.enabled,
+                                            onCheckedChange = { toggleTelemetry() }
+                                    )
+                                }
+                        )
+
+                        val context = LocalContext.current
+                        DropdownMenuItem(
+                                onClick = {
+                                    context.startActivity(
+                                            Intent(
+                                                    Intent.ACTION_VIEW,
+                                                    Uri.parse(PRIVACY_URL)
+                                            )
+                                    )
+                                },
+                                text = { Text(stringResource(R.string.privacy_policy)) },
+                                leadingIcon = {
+                                    Icon(
+                                            imageVector = Icons.TwoTone.Policy,
+                                            contentDescription = stringResource(R.string.privacy_policy)
+                                    )
+                                }
+                        )
+                    }
+
                     HorizontalDivider()
 
                     DropdownMenuItem(onClick = { openAboutView() },
@@ -463,6 +574,13 @@ fun StartView(
                     onDismissRequest = {
                         whatCanIWriteOpen = false
                     }, darkTheme = darkMode
+            )
+        }
+        if (telemetryDialogOpen) {
+            TelemetryAlertDialog(
+                    onDismissRequest = { telemetryDialogOpen = false },
+                    onOptOut = { setTelemetry(false) },
+                    onCancel = { setTelemetry(true) }
             )
         }
     }
@@ -497,6 +615,57 @@ fun WindowsImageAlertDialog(
         onDismissRequest()
     }) {
         Text(stringResource(R.string.cancel))
+    }
+})
+
+@Composable
+fun TelemetryAlertDialog(
+    onDismissRequest: () -> Unit,
+    onOptOut: () -> Unit,
+    onCancel: () -> Unit = {},
+) = AlertDialog(onDismissRequest = onDismissRequest, title = {
+    Text(text = stringResource(R.string.we_need_your_help))
+}, text = {
+    val scrollState = rememberScrollState()
+    val privacyPolicy = stringResource(R.string.privacy_policy)
+    val annotatedString = buildAnnotatedString {
+        val text = stringResource(R.string.telemetry_rationale, privacyPolicy)
+        val startIndex = text.indexOf(privacyPolicy)
+        val endIndex = startIndex + privacyPolicy.length
+
+        append(text)
+
+        addStyle(
+                style = SpanStyle(
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline
+                ), start = startIndex, end = endIndex
+        )
+        addLink(LinkAnnotation.Url(PRIVACY_URL), startIndex, endIndex)
+    }
+    Text(
+            modifier = Modifier.verticalScroll(scrollState),
+            text = annotatedString,
+            style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Paragraph),
+    )
+}, icon = {
+    Icon(
+            imageVector = ImageVector.vectorResource(id = R.drawable.ic_telemetry),
+            contentDescription = stringResource(R.string.telemetry_icon)
+    )
+}, confirmButton = {
+    TextButton(onClick = {
+        onOptOut()
+        onDismissRequest()
+    }) {
+        Text(stringResource(R.string.telemetry_opt_out))
+    }
+}, dismissButton = {
+    TextButton(onClick = {
+        onCancel()
+        onDismissRequest()
+    }) {
+        Text(stringResource(R.string.telemetry_keep_enabled))
     }
 })
 
@@ -753,7 +922,6 @@ fun WhatCanIWriteBottomSheet(onDismissRequest: () -> Unit, darkTheme: Boolean = 
                 )
             }
             item {
-                val uriHandler = LocalUriHandler.current
                 val annotatedString = buildAnnotatedString {
                     val str = stringResource(R.string.support_for_dmg_images_was_removed, "GitHub")
                     val startIndex = str.indexOf("GitHub")
@@ -819,6 +987,17 @@ fun WindowsAlertDialogPreview() {
     MainView(viewModel) {
         WindowsImageAlertDialog(onDismissRequest = { /*TODO*/ }, onConfirm = { /*TODO*/ },
             onCancel = { /*TODO*/ })
+    }
+}
+
+@PreviewScreenSizes()
+@Composable
+fun TelemetryAlertDialogPreview() {
+    val viewModel = remember { MainActivityViewModel() }
+
+    MainView(viewModel) {
+        TelemetryAlertDialog(onDismissRequest = { /*TODO*/ }, onOptOut = { /*TODO*/ },
+                onCancel = { /*TODO*/ })
     }
 }
 

@@ -103,6 +103,11 @@ import eu.depau.etchdroid.getStartJobIntent
 import eu.depau.etchdroid.massstorage.EtchDroidUsbMassStorageDevice.Companion.isMassStorageDevice
 import eu.depau.etchdroid.massstorage.UsbMassStorageDeviceDescriptor
 import eu.depau.etchdroid.massstorage.doesNotMatch
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
+import eu.depau.etchdroid.plugins.telemetry.Telemetry.telemetryTag
+import eu.depau.etchdroid.plugins.telemetry.TelemetryLevel
+import eu.depau.etchdroid.plugins.telemetry.TelemetryTraced
+import eu.depau.etchdroid.plugins.reviews.WriteReviewHelper
 import eu.depau.etchdroid.service.WorkerService
 import eu.depau.etchdroid.ui.composables.GifImage
 import eu.depau.etchdroid.ui.composables.KeepScreenOn
@@ -119,13 +124,12 @@ import eu.depau.etchdroid.utils.exception.base.FatalException
 import eu.depau.etchdroid.utils.exception.base.RecoverableException
 import eu.depau.etchdroid.utils.ktexts.activity
 import eu.depau.etchdroid.utils.ktexts.broadcastLocally
-import eu.depau.etchdroid.utils.ktexts.getFileName
+import eu.depau.etchdroid.utils.ktexts.getDisplayName
 import eu.depau.etchdroid.utils.ktexts.registerExportedReceiver
 import eu.depau.etchdroid.utils.ktexts.startForegroundServiceCompat
 import eu.depau.etchdroid.utils.ktexts.toHRSize
 import eu.depau.etchdroid.utils.ktexts.toast
 import eu.depau.etchdroid.utils.ktexts.usbDevice
-import eu.depau.etchdroid.plugins.reviews.WriteReviewHelper
 import kotlinx.coroutines.delay
 import me.jahnen.libaums.libusbcommunication.LibusbError
 import me.jahnen.libaums.libusbcommunication.LibusbException
@@ -144,6 +148,11 @@ class ProgressActivity : ComponentActivity() {
     private var mPermissionAsked = false
     private val mNotificationPermissionRequester =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Telemetry.addBreadcrumb {
+                message = "Notifications permission granted: $granted"
+                category = "notifications"
+                data["notifications.granted"] = granted
+            }
             mViewModel.setNotificationsPermission(granted)
         }
 
@@ -179,9 +188,11 @@ class ProgressActivity : ComponentActivity() {
                 permission.POST_NOTIFICATIONS
             )) {
             mPermissionAsked = true
+            Telemetry.addBreadcrumb("Requesting notifications runtime permission", "notifications")
             return mNotificationPermissionRequester.launch(permission.POST_NOTIFICATIONS)
         }
 
+        Telemetry.addBreadcrumb("Opening system settings to enable notifications", "notifications")
         startActivity(Intent().apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
@@ -209,6 +220,14 @@ class ProgressActivity : ComponentActivity() {
         refreshNotificationsPermission()
         mViewModel.updateFromIntent(intent)
 
+        Telemetry.configureScope {
+            val state = mViewModel.state.value
+            setTag("job.id", state.jobId.toString())
+            setTag("job.isVerifying", state.isVerifying.toString())
+            setTag("usb.device", state.destDevice?.name ?: "null")
+            setTag("usb.vidpid", state.destDevice?.vidpid ?: "null")
+        }
+
         setContent {
             MainView(mViewModel) {
                 val appState by mViewModel.state.collectAsState()
@@ -225,25 +244,34 @@ class ProgressActivity : ComponentActivity() {
                 when (appState.jobState) {
                     JobState.IN_PROGRESS, JobState.RECOVERABLE_ERROR -> {
                         BackHandler { println("Ignoring back button") }
-                        JobInProgressView(mViewModel, requestNotificationsPermission = {
-                            requestNotificationsPermission()
-                        }, dismissNotificationsBanner = {
-                            mSettings.showNotificationsBanner = false
-                        }, cancelVerification = {
-                            Intent(Intents.SKIP_VERIFY).broadcastLocally(this@ProgressActivity)
-                        })
+                        TelemetryTraced("job_in_progress_screen") {
+                            JobInProgressView(mViewModel, requestNotificationsPermission = {
+                                requestNotificationsPermission()
+                            }, dismissNotificationsBanner = {
+                                mSettings.showNotificationsBanner = false
+                            }, cancelVerification = {
+                                Telemetry.addBreadcrumb("User skipped verification", "flow")
+                                Intent(Intents.SKIP_VERIFY).broadcastLocally(this@ProgressActivity)
+                            })
+                        }
                     }
 
                     JobState.SUCCESS -> {
                         BackHandler { finish() }
-                        SuccessView()
+                        TelemetryTraced("success_screen") {
+                            SuccessView()
+                        }
                     }
 
                     JobState.FATAL_ERROR -> {
-                        FatalErrorView(
-                            exception = appState.exception!! as FatalException, imageUri = appState.sourceUri!!,
-                            jobId = appState.jobId, device = appState.destDevice!!
-                        )
+                        TelemetryTraced("fatal_error_screen") {
+                            FatalErrorView(
+                                    exception = appState.exception!! as FatalException,
+                                    imageUri = appState.sourceUri!!,
+                                    jobId = appState.jobId,
+                                    device = appState.destDevice!!
+                            )
+                        }
                     }
                 }
 
@@ -351,6 +379,11 @@ fun JobInProgressView(
                             if (clickCount >= 5) {
                                 clickCount = 0
                                 easterEgg = !easterEgg
+                                Telemetry.addBreadcrumb {
+                                    message = "Easter egg activated: $easterEgg"
+                                    category = "easter_egg"
+                                    level = TelemetryLevel.DEBUG
+                                }
                             }
                         } else {
                             clickCount = 0
@@ -496,10 +529,24 @@ fun JobInProgressView(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                         ) {
-                            OutlinedButton(onClick = dismissNotificationsBanner) {
+                            OutlinedButton(
+                                    modifier = Modifier.telemetryTag("notifications_dismiss_button"),
+                                    onClick = dismissNotificationsBanner
+                            ) {
+                                Telemetry.addBreadcrumb(
+                                        "User dismissed notifications banner",
+                                        "notifications"
+                                )
                                 Text(text = stringResource(R.string.no_thanks))
                             }
-                            Button(onClick = requestNotificationsPermission) {
+                            Button(
+                                    modifier = Modifier.telemetryTag("notifications_enable_button"),
+                                    onClick = requestNotificationsPermission
+                            ) {
+                                Telemetry.addBreadcrumb(
+                                        "User requested notifications",
+                                        "notifications"
+                                )
                                 Text(text = stringResource(R.string.sure))
                             }
                         }
@@ -521,7 +568,7 @@ fun JobInProgressView(
                         )
                         Text(
                                 text = " " + if (uiState.isVerifying) uiState.destDevice?.name
-                                else uiState.sourceUri?.getFileName(context),
+                                else uiState.sourceUri?.getDisplayName(context),
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -536,7 +583,7 @@ fun JobInProgressView(
                                 ) else stringResource(R.string.to)
                         )
                         Text(
-                                text = " " + if (uiState.isVerifying) uiState.sourceUri?.getFileName(
+                                text = " " + if (uiState.isVerifying) uiState.sourceUri?.getDisplayName(
                                         context
                                 )
                                 else uiState.destDevice?.name,
@@ -558,9 +605,10 @@ fun JobInProgressView(
 
                 if (uiState.percent >= 0) {
                     LinearProgressIndicator(
-                            progress = uiState.percent / 100f, modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 32.dp),
+                            progress = { uiState.percent / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
                             color = MaterialTheme.colorScheme.primary
                     )
                 } else {
@@ -575,8 +623,10 @@ fun JobInProgressView(
                 if (uiState.isVerifying) {
                     OutlinedButton(
                             modifier = Modifier
+                                .telemetryTag("skip_verification_button")
                                 .fillMaxWidth()
-                                .padding(horizontal = 32.dp), onClick = cancelVerification
+                                .padding(horizontal = 32.dp),
+                            onClick = cancelVerification
                     ) {
                         Text(text = stringResource(R.string.skip_verification))
                     }

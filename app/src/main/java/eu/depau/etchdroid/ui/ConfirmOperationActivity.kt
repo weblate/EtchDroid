@@ -82,12 +82,13 @@ import eu.depau.etchdroid.getProgressUpdateIntent
 import eu.depau.etchdroid.getStartJobIntent
 import eu.depau.etchdroid.massstorage.PreviewUsbDevice
 import eu.depau.etchdroid.massstorage.UsbMassStorageDeviceDescriptor
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
 import eu.depau.etchdroid.service.WorkerService
 import eu.depau.etchdroid.ui.composables.MainView
 import eu.depau.etchdroid.ui.utils.rememberPorkedAroundSheetState
 import eu.depau.etchdroid.utils.broadcastReceiver
+import eu.depau.etchdroid.utils.ktexts.formatID
 import eu.depau.etchdroid.utils.ktexts.getFileName
-import eu.depau.etchdroid.utils.ktexts.getFilePath
 import eu.depau.etchdroid.utils.ktexts.getFileSize
 import eu.depau.etchdroid.utils.ktexts.registerExportedReceiver
 import eu.depau.etchdroid.utils.ktexts.safeParcelableExtra
@@ -117,10 +118,16 @@ class ConfirmOperationActivity : ComponentActivity() {
                 TAG,
                 "Received USB broadcast without device and no selected device, ignoring: $intent"
             )
+            Telemetry.captureMessage("Received USB broadcast without device and no selected device")
             return@broadcastReceiver
         }
 
-        Log.d(TAG, "Received USB broadcast: ${intent.action}, device: ${intent.usbDevice}")
+        Telemetry.addBreadcrumb {
+            category = "usb"
+            message = "Received USB broadcast: ${intent.action}, device: $usbDevice"
+            data["intent.action"] = intent.action.toString()
+            data["usb.device"] = usbDevice.toString()
+        }
 
         when (intent.action) {
             Intents.USB_PERMISSION -> {
@@ -130,7 +137,12 @@ class ConfirmOperationActivity : ComponentActivity() {
                 val usbManager = getSystemService(USB_SERVICE) as UsbManager
                 val granted = usbManager.hasPermission(usbDevice)
 
-                Log.d(TAG, "USB permission granted: $granted")
+                Telemetry.addBreadcrumb {
+                    category = "usb"
+                    message = "USB permission granted: $granted"
+                    data["usb.device"] = usbDevice.toString()
+                    data["usb.permission"] = granted.toString()
+                }
                 mViewModel.setPermission(granted)
 
                 if (!granted) {
@@ -144,12 +156,20 @@ class ConfirmOperationActivity : ComponentActivity() {
 
             UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                 if (usbDevice == mViewModel.state.value.selectedDevice?.usbDevice) {
+                    Telemetry.addBreadcrumb {
+                        category = "usb"
+                        message = "Selected USB device was unplugged"
+                        data["usb.device"] = usbDevice.toString()
+                    }
                     toast(getString(R.string.usb_device_was_unplugged))
                     finish()
+                } else {
+                    Telemetry.addBreadcrumb("Unplugged USB device was not selected", "usb")
                 }
             }
 
             else -> {
+                Telemetry.captureMessage("Received unknown USB broadcast: ${intent.action}")
                 Log.w(TAG, "Received unknown broadcast: ${intent.action}")
             }
         }
@@ -181,7 +201,12 @@ class ConfirmOperationActivity : ComponentActivity() {
         val jobId = Random.nextInt()
         val intent =
             getStartJobIntent(uri, device, jobId, 0, false, this, WorkerService::class.java)
-        Log.d(TAG, "Starting service with intent: $intent")
+        Telemetry.addBreadcrumb {
+            category = "flow"
+            message = "Starting worker service; job ID: $jobId"
+            data["intent"] = intent.toString()
+            data["job.id"] = jobId.toString()
+        }
         startForegroundServiceCompat(intent)
         startActivity(
             getProgressUpdateIntent(
@@ -210,6 +235,29 @@ class ConfirmOperationActivity : ComponentActivity() {
                 return
             }
         mViewModel.init(openedImage, selectedDevice)
+
+        val imageFileName = openedImage.getFileName(this) ?: "unknown"
+        Telemetry.addBreadcrumb {
+            category = "flow"
+            message = "Image opened"
+            data["image.filename"] = imageFileName
+        }
+
+        Telemetry.configureScope {
+            setTag("usb.vid", formatID(selectedDevice.usbDevice.vendorId))
+            setTag("usb.pid", formatID(selectedDevice.usbDevice.productId))
+            setTag("usb.vidpid", selectedDevice.vidpid)
+            setTag("usb.name", selectedDevice.name)
+            setTag("image.filename", imageFileName)
+            try {
+                setTag(
+                        "image.size",
+                        openedImage.getFileSize(this@ConfirmOperationActivity).toString()
+                )
+            } catch (_: Exception) {
+                setTag("image.size", "unknown")
+            }
+        }
 
         // Use an immutable PendingIntent as recommended by the latest API
         val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -246,6 +294,13 @@ class ConfirmOperationActivity : ComponentActivity() {
                     finish()
                 }, askUsbPermission = {
                     val usbManager = getSystemService(USB_SERVICE) as UsbManager
+//                    Monitoring.addBreadcrumb("Requesting USB permission", "usb")
+                    Telemetry.addBreadcrumb {
+                        category = "usb"
+                        message = "Requesting USB permission: ${uiState.selectedDevice}"
+                        data["usb.name"] = uiState.selectedDevice?.name ?: "unknown"
+                        data["usb.vidpid"] = uiState.selectedDevice?.vidpid ?: "unknown"
+                    }
                     usbManager.requestPermission(
                         uiState.selectedDevice!!.usbDevice, mUsbPermissionIntent
                     )
@@ -390,11 +445,8 @@ fun ConfirmationView(
                             val context = LocalContext.current
                             val sourceFileName by remember {
                                 derivedStateOf {
-                                    sourceUri?.getFileName(context) ?: sourceUri?.getFilePath(
-                                            context
-                                    )
-                                        ?.split("/")
-                                        ?.last() ?: context.getString(R.string.unknown_filename)
+                                    sourceUri?.getFileName(context)
+                                        ?: context.getString(R.string.unknown_filename)
                                 }
                             }
                             val sourceFileSize by remember {

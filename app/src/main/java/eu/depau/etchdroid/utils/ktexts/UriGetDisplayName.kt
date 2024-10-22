@@ -6,7 +6,7 @@ import android.provider.OpenableColumns
 
 const val TAG = "UriGetFileNameExt"
 
-fun Uri.getFileName(context: Context): String? {
+fun Uri.getDisplayName(context: Context): String? {
     var result: String? = null
 
     if (this.scheme == "content") {

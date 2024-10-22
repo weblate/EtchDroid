@@ -1,11 +1,22 @@
 @file:Suppress("UnstableApiUsage")
 
+val isGPlayFlavor = gradle.startParameter.taskNames.any { it.lowercase().contains("gplay") }
+System.setProperty("etchdroid.isGPlayFlavor", isGPlayFlavor.toString())
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.junit5)
+
+    if (System.getProperty("etchdroid.isGPlayFlavor") == "true" || System.getenv("ETCHDROID_ENABLE_SENTRY") == "true") {
+        println("EtchDroid: Sentry enabled")
+//        alias(libs.plugins.gplay.sentry)
+        alias(libs.plugins.gplay.sentry.kotlin)
+    } else {
+        println("EtchDroid: Sentry not enabled")
+    }
 }
 
 android {
@@ -63,11 +74,11 @@ android {
     }
     compileOptions {
         encoding = "UTF-8"
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
     buildFeatures {
         compose = true
@@ -106,6 +117,8 @@ dependencies {
 
     "gplayImplementation"(libs.gplay.review)
     "gplayImplementation"(libs.gplay.review.ktx)
+    "gplayImplementation"(libs.gplay.sentry.android)
+    "gplayImplementation"(libs.gplay.sentry.compose)
 
     debugImplementation(libs.compose.ui.test.manifest)
     debugImplementation(libs.compose.ui.tooling)

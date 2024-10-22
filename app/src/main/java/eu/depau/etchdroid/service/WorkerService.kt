@@ -26,6 +26,7 @@ import eu.depau.etchdroid.massstorage.BlockDeviceOutputStream
 import eu.depau.etchdroid.massstorage.EtchDroidUsbMassStorageDevice
 import eu.depau.etchdroid.massstorage.UsbMassStorageDeviceDescriptor
 import eu.depau.etchdroid.massstorage.setUpLibUSB
+import eu.depau.etchdroid.plugins.telemetry.Telemetry
 import eu.depau.etchdroid.service.WorkerServiceFlowImpl.verifyImage
 import eu.depau.etchdroid.service.WorkerServiceFlowImpl.writeImage
 import eu.depau.etchdroid.ui.ProgressActivity
@@ -41,8 +42,8 @@ import eu.depau.etchdroid.utils.exception.base.EtchDroidException
 import eu.depau.etchdroid.utils.exception.base.FatalException
 import eu.depau.etchdroid.utils.ktexts.broadcastLocally
 import eu.depau.etchdroid.utils.ktexts.broadcastLocallySync
+import eu.depau.etchdroid.utils.ktexts.getDisplayName
 import eu.depau.etchdroid.utils.ktexts.getFileName
-import eu.depau.etchdroid.utils.ktexts.getFilePath
 import eu.depau.etchdroid.utils.ktexts.getFileSize
 import eu.depau.etchdroid.utils.ktexts.safeParcelableExtra
 import eu.depau.etchdroid.utils.ktexts.startForegroundSpecialUse
@@ -258,7 +259,7 @@ class WorkerService : LifecycleService() {
 
         try {
             if (intent?.action != Intents.START_JOB) {
-                Log.e(TAG, "Received invalid intent action: ${intent?.action}")
+                Telemetry.captureMessage("Received invalid intent action: ${intent?.action}")
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -269,28 +270,39 @@ class WorkerService : LifecycleService() {
             offset = intent.getLongExtra("offset", 0L)
             verifyOnly = intent.getBooleanExtra("verifyOnly", false)
 
+            val fileName = mSourceUri.getFileName(this@WorkerService) ?: "Unknown file"
+            Telemetry.configureScope {
+                setTag("intent", intent.toString())
+                setTag("job.id", mJobId.toString())
+                setTag("job.offset", offset.toString())
+                setTag("job.verifyOnly", verifyOnly.toString())
+                setTag("image.filename", fileName)
+                setTag("usb.name", mDestDevice.name)
+                setTag("usb.vidpid", mDestDevice.vidpid)
+            }
+
             if (mNotificationsSetUp) {
                 val notificationManager =
                     getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 try {
                     notificationManager.cancel(mJobId)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to cancel notification", e)
+                    Telemetry.captureException("Failed to cancel notification", e)
                 }
             }
 
             require(mJobId != -1) { "Job ID not set" }
 
-            Log.i(
-                    TAG, "Starting worker service for job: '${
-                mSourceUri.getFilePath(
-                        this
-                ) ?: "Unknown file"
-            }' -> '${mDestDevice.name}' (offset: ${offset.toHRSize(false)})"
-            )
+            Telemetry.addBreadcrumb {
+                message = "Starting worker service for job ${mJobId}: " +
+                        "'${fileName}' -> '${mDestDevice.name}' " +
+                        "(offset: ${offset.toHRSize(false)})"
+                category = "worker"
+            }
 
             startForegroundSpecialUse(mProgressNotificationId, basicForegroundNotification)
         } catch (exception: Exception) {
+            Telemetry.captureException("Failed to start worker service", exception)
             val downstreamException = if (exception is EtchDroidException) exception
             else UnknownException(exception)
             getErrorIntent(
@@ -303,8 +315,9 @@ class WorkerService : LifecycleService() {
         lifecycleScope.launch(Dispatchers.IO) {
             Thread.currentThread().name = "WorkerService coroutine scope"
 
-            Log.d(
-                TAG, "Job coroutine scope started; thread ${Thread.currentThread().name} (${Thread.currentThread().id})"
+            Telemetry.debug(
+                    "Job coroutine scope started; thread ${Thread.currentThread().name} (${Thread.currentThread().id})",
+                    "worker"
             )
 
             var massStorageDev by lateInit<EtchDroidUsbMassStorageDevice>()
@@ -317,14 +330,17 @@ class WorkerService : LifecycleService() {
 
             try {
                 try {
+                    Telemetry.debug("Building USB mass storage device", "worker")
                     massStorageDev = mDestDevice.buildDevice(this@WorkerService).apply {
                         init()
                     }
                     blockDev = massStorageDev.blockDevices[0]!!
                 } catch (e: Exception) {
-                    throw if (e is EtchDroidException) e else InitException(
-                        "Initialization failed", e
-                    )
+                    Telemetry.captureException("Failed to initialize USB mass storage device", e)
+                    throw if (e is EtchDroidException)
+                        e
+                    else
+                        InitException("Initialization failed", e)
                 }
                 currentOffset = offset - (offset % blockDev.blockSize)
 
@@ -332,21 +348,20 @@ class WorkerService : LifecycleService() {
                 currentOffset = max(currentOffset - blockDev.blockSize * BUFFER_BLOCKS * 2, 0L)
 
                 val devSize = blockDev.blocks * blockDev.blockSize
-                Log.d(
-                    TAG, "Device size: ${
-                        devSize.toHRSize(
-                            false
-                        )
-                    } " + "(block size: ${
-                        blockDev.blockSize.toHRSize(
-                            false
-                        )
-                    }, " + "num blocks: ${blockDev.blocks})"
+                Telemetry.debug(
+                        "Device size: ${devSize.toHRSize(false)} " +
+                                "(block size: ${blockDev.blockSize.toHRSize(false)}, " +
+                                "num blocks: ${blockDev.blocks})",
+                        "worker"
                 )
                 imageSize = mSourceUri.getFileSize(this@WorkerService)
 
                 if (devSize < imageSize) {
-                    Log.e(TAG, "Device size is smaller than image size")
+                    Telemetry.captureMessage(
+                            "Device size is smaller than image size: " +
+                                    "device: ${devSize.toHRSize(false)}, " +
+                                    "image: ${imageSize.toHRSize(false)}"
+                    )
                     throw NotEnoughSpaceException(sourceSize = imageSize, destSize = devSize)
                 }
 
@@ -361,14 +376,18 @@ class WorkerService : LifecycleService() {
                     try {
                         rawSourceStream = contentResolver.openInputStream(mSourceUri)!!
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to open image file", e)
+                        Telemetry.captureException("Failed to open image file", e)
                         throw OpenFileException("Failed to open image file", e)
                     }
+
+                    Telemetry.info("Writing image to USB drive", "worker")
 
                     writeImage(
                         rawSourceStream, blockDev, imageSize, bufferSize, currentOffset, { currentOffset = it },
                         coroScope, ::ensureWakelock, ::sendProgressUpdate
                     )
+                } else {
+                    Telemetry.info("Skipping write, only verifying image on USB drive", "worker")
                 }
 
                 // Verify written image
@@ -383,6 +402,8 @@ class WorkerService : LifecycleService() {
                 currentOffset = 0
                 mLast10Speeds.clear()
 
+                Telemetry.info("Verifying image on USB drive", "worker")
+
                 verifyImage(rawSourceStream, blockDev, imageSize, bufferSize, { currentOffset = it }, coroScope,
                     ::sendProgressUpdate, { mVerificationCancelled }, ::ensureWakelock
                 )
@@ -392,7 +413,7 @@ class WorkerService : LifecycleService() {
                 )
 
             } catch (exception: Exception) {
-                Log.e(TAG, "Operation failed", exception)
+                Telemetry.captureException(exception)
                 val downstreamException = if (exception is EtchDroidException) exception
                 else UnknownException(exception)
                 getErrorIntent(
@@ -407,13 +428,13 @@ class WorkerService : LifecycleService() {
                     try {
                         rawSourceStream.close()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to close image file", e)
+                        Telemetry.captureException("Failed to close image file", e)
                     }
                 }
                 try {
                     massStorageDev.close()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to close USB drive", e)
+                    Telemetry.captureException("Failed to close USB drive", e)
                 }
                 stopSelf()
             }
@@ -456,7 +477,7 @@ class WorkerService : LifecycleService() {
     }
 
     private val filenameStr: String by lazy {
-        mSourceUri.getFileName(this) ?: getString(R.string.unknown_filename)
+        mSourceUri.getDisplayName(this) ?: getString(R.string.unknown_filename)
     }
 
     private val basicForegroundNotification: Notification
@@ -543,7 +564,7 @@ object WorkerServiceFlowImpl {
                         dst.writeAsync(buffer, 0, read)
                         watchdog.bump()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to write to USB drive", e)
+                        Telemetry.captureException("Failed to write to USB drive", e)
                         throw UsbCommunicationException(e)
                     }
                     currentOffset += read
@@ -556,7 +577,7 @@ object WorkerServiceFlowImpl {
                     dst.flushAsync()
                     watchdog.bump()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to flush USB drive", e)
+                    Telemetry.captureException("Failed to flush USB drive", e)
                     throw UsbCommunicationException(e)
                 }
             }
@@ -617,12 +638,12 @@ object WorkerServiceFlowImpl {
                         ) { "Device read $deviceRead < file read $read" }
                         watchdog.bump()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to read from USB drive", e)
+                        Telemetry.captureException("Failed to read from USB drive", e)
                         throw UsbCommunicationException(e)
                     }
 
                     if (!fileBuffer.contentEquals(deviceBuffer)) {
-                        Log.e(TAG, "Verification failed")
+                        Telemetry.captureMessage("Verification failed")
                         if (Build.VERSION.SDK_INT > 999999) {
                             // Prevent the compiler from optimizing out the buffers, for debugging
                             // purposes
@@ -642,7 +663,7 @@ object WorkerServiceFlowImpl {
             try {
                 dst.closeAsync()
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to read from USB drive", e)
+                Telemetry.captureException("Failed to read from USB drive", e)
                 throw UsbCommunicationException(e)
             }
         }

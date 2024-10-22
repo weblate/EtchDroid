@@ -12,11 +12,17 @@ lifecycle = "2.8.6"
 lottie = "6.2.0"
 mockito = "5.8.0"
 
+# Note for F-Droid developers: Sentry is not enabled for F-Droid builds
+sentry-lib = "7.15.0"
+sentry-plugin = "4.12.0"
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 android-junit5 = { id = "de.mannodermaus.android-junit5", version = "1.10.0.0" }
 android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+gplay-sentry = { id = "io.sentry.android.gradle", version.ref = "sentry-plugin" }
+gplay-sentry-kotlin = { id = "io.sentry.kotlin.compiler.gradle", version.ref = "sentry-plugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-parcelize = { id = "kotlin-parcelize" }
 
@@ -38,6 +44,8 @@ core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version = "3.6.1" }
 gplay-review = { group = "com.google.android.play", name = "review", version.ref = "gplay" }
 gplay-review-ktx = { group = "com.google.android.play", name = "review-ktx", version.ref = "gplay" }
+gplay-sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "sentry-lib" }
+gplay-sentry-compose = { group = "io.sentry", name = "sentry-compose-android", version.ref = "sentry-lib" }
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit" }
 kotlin-stdlib-jdk8 = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib-jdk8", version.ref = "kotlin" }
 kotlinx-coroutines-debug = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-debug", version = "1.7.3" }

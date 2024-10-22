@@ -125,4 +125,11 @@
     <string name="worker_null_device_error">È stato avviato un tentativo di scrittura ma purtroppo alcune informazioni non sono pervenute. Per favore, prova di nuovo.</string>
     <string name="please_report_fatal_issue">Se possibile, segnala il problema su GitHub, includendo i passaggi intrapresi che hanno portato a questo errore.</string>
     <string name="view_github_issues">Problemi su GitHub</string>
+    <string name="telemetry">Telemetria</string>
+    <string name="privacy_policy">Informativa sulla privacy</string>
+    <string name="telemetry_rationale">EtchDroid rispetta la tua privacy e invia poche informazioni che falicitano l\'investigazione dei problemi.\n\nFai parte della nostra comunità open-source: mantieni la telemetria attiva e aiuta a migliorare EtchDroid per tutti!\n\nAnche se non raccogliamo informazioni personalmente identificabili, crediamo nella trasparenza e vogliamo che tu sappia che i nomi dei file immagine aperti e gli ID dei dispositivi USB vengono raccolti in modo anonimo per aiutare a diagnosticare problemi con hardware specifico. A meno che i nomi dei tuoi file o gli identificativi dei tuoi dispositivi USB non siano sensibili, è sicuro condividere questi dati.  (%1$s)</string>
+    <string name="we_need_your_help">Abbiamo bisogno del tuo aiuto!</string>
+    <string name="telemetry_icon">Icona per la telemetria</string>
+    <string name="telemetry_opt_out">Disattiva telemetria</string>
+    <string name="telemetry_keep_enabled">Mantieni attiva</string>
 </resources>
