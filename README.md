@@ -48,6 +48,26 @@ If you want to say thanks, you can send a donation.
 
 [![Translation status](https://hosted.weblate.org/widgets/etchdroid/-/app/open-graph.png)](https://hosted.weblate.org/engage/etchdroid/?utm_source=widget)
 
+## Telemetry
+
+> [!NOTE]
+> F-Droid builds do not include telemetry. Google Play and GitHub builds do.
+
+EtchDroid Google Play and GitHub builds collect minimal telemetry to investigate app issues.
+
+While we don't collect any personally-identifying information, we believe in transparency and want
+you to know that opened image file names and USB device IDs are collected anonymously to help
+diagnose issues with specific hardware. Unless your image file names or device IDs are highly
+sensitive, it's safe to share this data.
+
+If you don't want to share this data, you can disable telemetry in the app menu, or download the
+F-Droid version of EtchDroid.
+
+Be a part of our open-source community—keep telemetry enabled and help improve EtchDroid for
+everyone!
+
+See the [privacy policy](https://etchdroid.app/privacy/) for more information.
+
 ## Screenshots
 
 <p align="center">
