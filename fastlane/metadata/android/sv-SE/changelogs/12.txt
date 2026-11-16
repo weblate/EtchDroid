@@ -1,0 +1,2 @@
+• Uppdateringar och buggfixar till libaums ger förbättrad tillförlitlighet vid användning av ”kräsna” USB-enheter och Android-enheter.
+• Översättningsuppdateringar.
